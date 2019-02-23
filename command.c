@@ -10,6 +10,8 @@ createcommand(void)
 	Command *c = mallocz(sizeof(Command), 1);
 	c->argc = 0;
 	c->args = malloc(sizeof(char*) * MAXWORD);
+	if(c->args == nil)
+		sysfatal("%s: Failed to allocate args", argv0);
 
 	c->in = p;
 
@@ -44,14 +46,24 @@ destroycommand(Command *c)
 	free(c);
 }
 
-/* Treats '>file' and '> file' the same */
 int
-cleanandopen(int n, char *args[], int i, int mode)
+createoropen(char *file, int mode, int perm)
 {
-	if(strlen(args[i]) == 1 && i+1 < n)
-		return open(args[i+1], mode);
+	int fd;
+	if((fd = open(file, mode)) < 0)
+		return create(file, mode, perm);
+
+	return fd;
+}
+
+/* Treats '>file' and '> file' the same */
+char*
+cleanredir(int n, char *args[], int *i)
+{
+	if(strlen(args[*i]) == 1 && *i+1 < n)
+		return args[++(*i)];
 	else
-		return open(args[i]+1, mode);
+		return args[*i]+1;
 }
 
 /* | pipe
@@ -67,17 +79,19 @@ commandparse(int n, char *args[])
 	for(i = 0; i < n; i++){
 		switch(args[i][0]){
 		case '>':
-			c->out.fd = cleanandopen(n, args, i, OWRITE | OTRUNC);
+			c->out.fd = createoropen(cleanredir(n, args, &i), OWRITE | OTRUNC, 0777);
+			print("%d\n", c->out.fd);
 			if(c->out.fd < 0)
 				goto error;
 			break;
 		case '<':
-			c->in.fd = cleanandopen(n, args, i, OREAD);
+			c->in.fd = createoropen(cleanredir(n, args, &i), OREAD, 0777);
 			if(c->in.fd < 0)
 				goto error;
 			break;
 		case '|':
-			c->out.c = commandparse(n - i, args+i);
+			c->out.type = COMMAND;
+			c->out.c = commandparse(n - (i + 1), args + i + 1);
 			if(c->out.c == nil)
 				goto error;
 			return c;
@@ -107,6 +121,56 @@ waitprint(void)
 		w->pid, w->time[0], w->time[1], w->time[2], w->msg);
 
 	free(w);
+}
+
+void
+commandpipe(Command *c)
+{
+	int inpipe[2];
+	switch(c->in.type){
+	case FILE:
+		dup(c->in.fd, 0);
+		break;
+	case COMMAND:
+		pipe(inpipe);
+		if(fork() == 0){
+			c->in.c->out.fd = inpipe[1];
+			commandexec(c->in.c);
+		}
+		c->in.type = FILE;
+		c->in.fd = inpipe[0];	
+	}
+
+	int outpipe[2];
+	switch(c->out.type){
+	case FILE:
+		dup(c->out.fd, 1);
+		break;
+	case COMMAND:
+		pipe(outpipe);
+		if(fork() == 0){
+			c->out.c->in.fd = outpipe[1];
+			commandexec(c->out.c);
+		}
+		c->out.type = FILE;
+		c->out.fd = outpipe[0];
+	}
+
+	int errpipe[2];
+	switch(c->err.type){
+	case FILE:
+		dup(c->err.fd, 2);
+		break;
+	case COMMAND:
+		pipe(errpipe);
+		if(fork() == 0){
+			c->err.c->in.fd = errpipe[1];
+			commandexec(c->err.c);
+		}
+		c->err.type = FILE;
+		c->err.fd = errpipe[0];		
+	}
+
 }
 
 void
@@ -142,6 +206,8 @@ commandexec(Command *c)
 		}
 
 	c->args[c->argc] = nil;
+
+	commandpipe(c);
 
 	#ifdef _PLAN9_SOURCE
 		char buf[MAXPATH];

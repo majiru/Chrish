@@ -14,6 +14,7 @@ void
 main(int argc, char *argv[])
 {
 	char in;
+	char *prompt = "cpre308>";
 
 	char buf[MAXPATH];
 	char *args[MAXARG];
@@ -23,6 +24,13 @@ main(int argc, char *argv[])
 	int n;
 	Command *c;
 
+	ARGBEGIN{
+	case 'p': prompt = EARGF(usage); break;
+	default:
+		usage();
+	}ARGEND
+
+	print("%s", prompt);
 	for(;;){
 		n = read(0, &in, 1);
 		if(n != 1)
@@ -36,7 +44,8 @@ main(int argc, char *argv[])
 			argcount = gettokens(buf, args, MAXARG, " ");
 			c = commandparse(argcount, args);
 			commandexec(c);
-			destroycommand(c);
+			//destroycommand(c);
+			print("%s", prompt);
 			break;
 		default:
 			buf[offset++] = in;

@@ -15,6 +15,7 @@ main(int argc, char *argv[])
 {
 	char in;
 	char *prompt = "cpre308>";
+	chatty = 0;
 
 	char buf[MAXPATH];
 	char *args[MAXARG];
@@ -26,6 +27,7 @@ main(int argc, char *argv[])
 
 	ARGBEGIN{
 	case 'p': prompt = EARGF(usage); break;
+	case 'D': chatty++; break;
 	default:
 		usage();
 	}ARGEND

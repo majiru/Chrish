@@ -4,7 +4,7 @@
 
 enum {
 	COMMAND,
-	FILE,
+	FD,
 };
 
 typedef struct Command Command;
@@ -23,6 +23,9 @@ struct Command {
 	char **args;
 	Pipe in, out, err;
 };
+
+/* Global Flags */
+int chatty;
 
 /* command.c */
 void		destroypipe(Pipe *p);

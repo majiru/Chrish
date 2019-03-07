@@ -6,7 +6,7 @@
 Command*
 createcommand(void)
 {
-	Pipe p = {FILE, 0};
+	Pipe p = {FD, 0};
 	Command *c = mallocz(sizeof(Command), 1);
 	c->argc = 0;
 	c->args = malloc(sizeof(char*) * MAXWORD);
@@ -80,7 +80,6 @@ commandparse(int n, char *args[])
 		switch(args[i][0]){
 		case '>':
 			c->out.fd = createoropen(cleanredir(n, args, &i), OWRITE | OTRUNC, 0777);
-			print("%d\n", c->out.fd);
 			if(c->out.fd < 0)
 				goto error;
 			break;
@@ -116,9 +115,10 @@ waitprint(void)
 	w = wait();
 	if(w == nil)
 		return;
-
-	print("Pid: %d\tUser code: %uld Syscalls: %uld Total: %uldt\t %s\n",
-		w->pid, w->time[0], w->time[1], w->time[2], w->msg);
+	
+	if(chatty)
+		print("Pid: %d\tUser code: %uld Syscalls: %uld Total: %uldt\t %s\n",
+			w->pid, w->time[0], w->time[1], w->time[2], w->msg);
 
 	free(w);
 }
@@ -128,47 +128,50 @@ commandpipe(Command *c)
 {
 	int inpipe[2];
 	switch(c->in.type){
-	case FILE:
-		dup(c->in.fd, 0);
-		break;
 	case COMMAND:
 		pipe(inpipe);
 		if(fork() == 0){
 			c->in.c->out.fd = inpipe[1];
 			commandexec(c->in.c);
 		}
-		c->in.type = FILE;
+		c->in.type = FD;
 		c->in.fd = inpipe[0];	
+		/* fallthrough */
+	case FD:
+		dup(c->in.fd, 0);
+		break;
 	}
 
 	int outpipe[2];
 	switch(c->out.type){
-	case FILE:
-		dup(c->out.fd, 1);
-		break;
 	case COMMAND:
 		pipe(outpipe);
 		if(fork() == 0){
 			c->out.c->in.fd = outpipe[1];
 			commandexec(c->out.c);
 		}
-		c->out.type = FILE;
+		c->out.type = FD;
 		c->out.fd = outpipe[0];
+		/* fallthrough */
+	case FD:
+		dup(c->out.fd, 1);
+		break;
 	}
 
 	int errpipe[2];
 	switch(c->err.type){
-	case FILE:
-		dup(c->err.fd, 2);
-		break;
 	case COMMAND:
 		pipe(errpipe);
 		if(fork() == 0){
 			c->err.c->in.fd = errpipe[1];
 			commandexec(c->err.c);
 		}
-		c->err.type = FILE;
+		c->err.type = FD;
 		c->err.fd = errpipe[0];		
+		/* fallthrough */
+	case FD:
+		dup(c->err.fd, 2);
+		break;
 	}
 
 }
@@ -194,7 +197,8 @@ commandexec(Command *c)
 	pid = fork();
 
 	if(pid != 0){
-		print("%s: %d\n", c->args[0], pid);
+		if(chatty)
+			print("%s: %d\n", c->args[0], pid);
 		if(block)
 			waitprint();
 		return;

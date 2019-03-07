@@ -44,7 +44,7 @@ main(int argc, char *argv[])
 			argcount = gettokens(buf, args, MAXARG, " ");
 			c = commandparse(argcount, args);
 			commandexec(c);
-			//destroycommand(c);
+			destroycommand(c);
 			print("%s", prompt);
 			break;
 		default:

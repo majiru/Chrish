@@ -185,9 +185,10 @@ commandexec(Command *c)
 	if(execbuiltin(c->argc, c->args) == 1)
 		return;
 
-	if(c->args[c->argc - 1][0] == '&')
+	if(c->args[c->argc - 1][0] == '&'){
 		block = 0;
-	else
+		c->argc--;
+	}else
 		block = 1;
 
 	pid = fork();
